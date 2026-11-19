@@ -39,6 +39,8 @@ const ASSIGNMENT_TYPES: { value: string; label: string }[] = [
   { value: "REVISION", label: "Révision" },
 ];
 
+const MONTH_DAYS_FR = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
 function formatTypeLabel(type: string): string {
   const found = ASSIGNMENT_TYPES.find((t) => t.value === type);
   if (found) return found.label;
@@ -51,6 +53,15 @@ function toDateInputValue(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function getMondayOfDate(date: Date): Date {
+  const startWeekday = (date.getDay() + 6) % 7;
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() - startWeekday
+  );
 }
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -73,15 +84,17 @@ export function AgendaClient({
     useState<AgendaAssignment[]>(initialAssignments);
   const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
 
-  // Date de référence / jour sélectionné (par défaut aujourd'hui)
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState<Date>(
+    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  );
+  const calendarPopoverRef = useRef<HTMLDivElement | null>(null);
 
-  // Échéance ouverte dans la fiche de détail
   const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(
     null
   );
 
-  // Modale ajout échéance
   const [modalOpen, setModalOpen] = useState(false);
   const [newSubjectId, setNewSubjectId] = useState(subjects[0]?.id || "");
   const [newTitle, setNewTitle] = useState("");
@@ -98,6 +111,12 @@ export function AgendaClient({
       ) {
         setTypeMenuOpen(false);
       }
+      if (
+        calendarPopoverRef.current &&
+        !calendarPopoverRef.current.contains(event.target as Node)
+      ) {
+        setCalendarOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -108,20 +127,21 @@ export function AgendaClient({
     return assignments.filter((a) => a.subject.id === subjectFilter);
   }, [assignments, subjectFilter]);
 
-  // Semaine (Lundi -> Dimanche) contenant selectedDate
   const weekDays = useMemo(() => {
-    const startWeekday = (selectedDate.getDay() + 6) % 7; // 0 = Lundi
-    const monday = new Date(
-      selectedDate.getFullYear(),
-      selectedDate.getMonth(),
-      selectedDate.getDate() - startWeekday
-    );
+    const monday = getMondayOfDate(selectedDate);
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
       return d;
     });
   }, [selectedDate]);
+
+  const weekOffsetFromNow = useMemo(() => {
+    const currentMonday = getMondayOfDate(new Date());
+    const displayedMonday = weekDays[0];
+    const diffMs = displayedMonday.getTime() - currentMonday.getTime();
+    return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+  }, [weekDays]);
 
   const weekRangeLabel = useMemo(() => {
     const first = weekDays[0];
@@ -158,6 +178,51 @@ export function AgendaClient({
     () => assignments.find((a) => a.id === activeAssignmentId) || null,
     [assignments, activeAssignmentId]
   );
+
+  const monthCells = useMemo(() => {
+    const year = pickerMonth.getFullYear();
+    const month = pickerMonth.getMonth();
+    const firstOfMonth = new Date(year, month, 1);
+    const startOffset = (firstOfMonth.getDay() + 6) % 7;
+    const gridStart = new Date(year, month, 1 - startOffset);
+
+    return Array.from({ length: 42 }, (_, idx) => {
+      const date = new Date(gridStart);
+      date.setDate(gridStart.getDate() + idx);
+      return {
+        date,
+        inCurrentMonth: date.getMonth() === month,
+      };
+    });
+  }, [pickerMonth]);
+
+  const pickerMonthLabel = useMemo(() => {
+    return pickerMonth.toLocaleDateString("fr-FR", {
+      month: "long",
+      year: "numeric",
+    });
+  }, [pickerMonth]);
+
+  function openCalendarPopover() {
+    setPickerMonth(
+      new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
+    );
+    setCalendarOpen((prev) => !prev);
+  }
+
+  function handleSelectCalendarDate(date: Date) {
+    setSelectedDate(
+      new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    );
+    setCalendarOpen(false);
+  }
+
+  function handleJumpToToday() {
+    const today = new Date();
+    setSelectedDate(today);
+    setPickerMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setCalendarOpen(false);
+  }
 
   function openModalForDate(date: Date) {
     if (!newSubjectId && subjects[0]?.id) {
@@ -239,7 +304,6 @@ export function AgendaClient({
         )
       );
 
-      // Caler la vue sur la date créée pour la voir immédiatement
       const [yy, mm, dd] = newDate.split("-").map(Number);
       if (yy && mm && dd) {
         setSelectedDate(new Date(yy, mm - 1, dd));
@@ -253,6 +317,112 @@ export function AgendaClient({
   }
 
   const selectedTypeLabel = formatTypeLabel(newType);
+
+  function renderCalendarPicker() {
+    return (
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-72 bg-[#161B22] border border-[#2C3446] rounded-xl p-3.5 shadow-2xl space-y-3"
+      >
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() =>
+              setPickerMonth(
+                (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+              )
+            }
+            aria-label="Mois précédent"
+            className="p-1.5 text-zinc-400 hover:text-white hover:bg-[#222836] rounded-lg cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <span className="text-xs font-medium text-white capitalize">
+            {pickerMonthLabel}
+          </span>
+
+          <button
+            type="button"
+            onClick={() =>
+              setPickerMonth(
+                (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+              )
+            }
+            aria-label="Mois suivant"
+            className="p-1.5 text-zinc-400 hover:text-white hover:bg-[#222836] rounded-lg cursor-pointer"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 text-center">
+          {MONTH_DAYS_FR.map((label) => (
+            <span
+              key={label}
+              className="text-[10px] text-zinc-500 py-1 select-none"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {monthCells.map(({ date, inCurrentMonth }, idx) => {
+            const isSelected = isSameDay(date, selectedDate);
+            const isTodayCell = isSameDay(date, new Date());
+            const hasEvents = filteredAssignments.some((a) =>
+              isSameDay(new Date(a.dueDate), date)
+            );
+
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSelectCalendarDate(date)}
+                className={`h-8 rounded-lg text-xs tabular-nums flex flex-col items-center justify-center relative transition-colors cursor-pointer ${
+                  isSelected
+                    ? "bg-indigo-600 text-white"
+                    : isTodayCell
+                    ? "bg-[#1E2536] text-indigo-300 border border-indigo-500/40"
+                    : inCurrentMonth
+                    ? "text-zinc-200 hover:bg-[#222836]"
+                    : "text-zinc-600 hover:bg-[#1C2230]"
+                }`}
+              >
+                <span>{date.getDate()}</span>
+                {hasEvents && (
+                  <span
+                    className={`w-1 h-1 rounded-full mt-0.5 ${
+                      isSelected ? "bg-white" : "bg-indigo-400"
+                    }`}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="pt-2 border-t border-[#222836] flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={handleJumpToToday}
+            className="px-2.5 py-1 text-[11px] bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg cursor-pointer"
+          >
+            Aller à aujourd&apos;hui
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCalendarOpen(false)}
+            className="px-2.5 py-1 text-[11px] text-zinc-400 hover:text-white rounded-lg cursor-pointer"
+          >
+            Fermer
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   function renderAssignmentCard(item: AgendaAssignment, compact = false) {
     const color = item.subject?.color || "#6366f1";
@@ -339,14 +509,26 @@ export function AgendaClient({
           <h1 className="text-xl sm:text-2xl text-white tracking-tight">
             Agenda & Devoirs
           </h1>
-          <p className="text-xs text-zinc-400 mt-0.5 capitalize hidden md:block">
-            Semaine du {weekRangeLabel}
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-zinc-400 capitalize hidden md:block">
+              Semaine du {weekRangeLabel}
+            </p>
+            {weekOffsetFromNow !== 0 && (
+              <span className="px-2 py-0.5 rounded-md text-[11px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                {weekOffsetFromNow > 0
+                  ? `+${weekOffsetFromNow} sem`
+                  : `${weekOffsetFromNow} sem`}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Navigation semaine (PC) */}
-          <div className="hidden md:flex items-center gap-1 bg-[#161B22] border border-[#262C3A] rounded-lg p-1">
+          {/* Navigation semaine + Aujourd'hui (calendrier) */}
+          <div
+            ref={calendarPopoverRef}
+            className="hidden md:flex items-center gap-1 bg-[#161B22] border border-[#262C3A] rounded-lg p-1 relative"
+          >
             <button
               type="button"
               onClick={() => shiftWeek(-1)}
@@ -357,10 +539,11 @@ export function AgendaClient({
             </button>
             <button
               type="button"
-              onClick={() => setSelectedDate(new Date())}
-              className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white rounded-md cursor-pointer"
+              onClick={openCalendarPopover}
+              className="px-2.5 py-1 text-xs text-zinc-200 hover:text-white hover:bg-[#222836] rounded-md flex items-center gap-1.5 cursor-pointer"
             >
-              Aujourd&apos;hui
+              <CalendarIcon className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Aujourd&apos;hui</span>
             </button>
             <button
               type="button"
@@ -370,6 +553,12 @@ export function AgendaClient({
             >
               <ChevronRight className="w-4 h-4" />
             </button>
+
+            {calendarOpen && (
+              <div className="hidden md:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-40">
+                {renderCalendarPicker()}
+              </div>
+            )}
           </div>
 
           {/* Filtre par matière */}
@@ -397,16 +586,15 @@ export function AgendaClient({
         </div>
       </div>
 
-      {/* VUE MOBILE (< md) : 1 JOUR À LA FOIS + BLOCS AÉRÉS */}
+      {/* VUE MOBILE (< md) : 1 JOUR À LA FOIS */}
       <div className="md:hidden space-y-4">
-        {/* Sélecteur jour courant < Jeudi 19 > */}
         <div className="bg-[#161B22] border border-[#262C3A] rounded-xl p-3 space-y-3">
           <div className="flex items-center justify-between">
             <button
               type="button"
-              onClick={() => shiftDay(-1)}
+              onClick={() => shiftWeek(-1)}
               className="p-2 text-zinc-300 hover:text-white bg-[#0F1117] border border-[#262C3A] rounded-lg cursor-pointer"
-              aria-label="Jour précédent"
+              aria-label="Semaine précédente"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -417,22 +605,29 @@ export function AgendaClient({
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedDate(new Date())}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 mt-0.5 cursor-pointer"
+                onClick={openCalendarPopover}
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 mt-0.5 inline-flex items-center gap-1 cursor-pointer"
               >
-                Revenir à aujourd&apos;hui
+                <CalendarIcon className="w-3 h-3" />
+                <span>Aujourd&apos;hui / Calendrier</span>
               </button>
             </div>
 
             <button
               type="button"
-              onClick={() => shiftDay(1)}
+              onClick={() => shiftWeek(1)}
               className="p-2 text-zinc-300 hover:text-white bg-[#0F1117] border border-[#262C3A] rounded-lg cursor-pointer"
-              aria-label="Jour suivant"
+              aria-label="Semaine suivante"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
+
+          {calendarOpen && (
+            <div className="md:hidden flex justify-center pt-1">
+              {renderCalendarPicker()}
+            </div>
+          )}
 
           {/* Bandeau des 7 jours de la semaine */}
           <div className="grid grid-cols-7 gap-1">
@@ -517,7 +712,6 @@ export function AgendaClient({
                 today ? "border-indigo-500/60" : "border-[#262C3A]"
               }`}
             >
-              {/* En-tête colonne jour */}
               <div className="flex items-center justify-between pb-2 border-b border-[#222836]">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-zinc-400 capitalize">
@@ -544,7 +738,6 @@ export function AgendaClient({
                 </button>
               </div>
 
-              {/* Blocs du jour */}
               {dayItems.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-[11px] text-zinc-600 text-center px-2">
                   Rien de prévu

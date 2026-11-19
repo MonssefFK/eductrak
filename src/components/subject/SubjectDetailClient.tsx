@@ -60,6 +60,7 @@ export function SubjectDetailClient({
   const [resources, setResources] = useState<ResourceRow[]>(initialResources);
   const [notes, setNotes] = useState(subject.notes || "");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [deletingSubject, setDeletingSubject] = useState(false);
 
   const [selectedChapter, setSelectedChapter] = useState<ChapterData | null>(
     initialSelectedChapterId
@@ -206,6 +207,29 @@ export function SubjectDetailClient({
     }
   }
 
+  async function handleDeleteSubject() {
+    if (deletingSubject) return;
+    const confirmed = window.confirm(
+      `Supprimer définitivement la matière "${subject.name}" ?`
+    );
+    if (!confirmed) return;
+
+    setDeletingSubject(true);
+    try {
+      const res = await fetch(`/api/subjects/${subject.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setDeletingSubject(false);
+        return;
+      }
+      router.push("/");
+      router.refresh();
+    } catch {
+      setDeletingSubject(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* En-tête matière */}
@@ -221,7 +245,7 @@ export function SubjectDetailClient({
             </h1>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             {subject.driveUrl && (
               <a
                 href={subject.driveUrl}
@@ -259,6 +283,16 @@ export function SubjectDetailClient({
                 <span>Ajouter une échéance</span>
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={handleDeleteSubject}
+              disabled={deletingSubject}
+              className="px-3 py-1.5 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 rounded-lg flex items-center gap-1.5 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{deletingSubject ? "Suppression..." : "Supprimer"}</span>
+            </button>
           </div>
         </div>
 
