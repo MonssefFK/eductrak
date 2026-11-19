@@ -2,6 +2,7 @@ import { MasteryLevel } from "@prisma/client";
 
 export const MASTERY_WEIGHTS: Record<MasteryLevel, number> = {
   NOT_STARTED: 0,
+  IN_PROGRESS: 0.15,
   COURSE_SEEN: 0.35,
   TD_IN_PROGRESS: 0.7,
   MASTERED: 1,

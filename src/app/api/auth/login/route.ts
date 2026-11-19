@@ -1,70 +1,49 @@
-import { NextResponse } from "next/server";
-import crypto from "crypto";
+import { NextRequest, NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { attachSessionCookie, signSessionToken } from "@/lib/auth";
 
-export interface SessionPayload {
-  userId: string;
-  email: string;
-  name: string;
-}
-
-const SESSION_COOKIE_NAME = "eductrak_session";
-
-function getSessionSecret(): string {
-  return process.env.SESSION_SECRET || process.env.JWT_SECRET || "dev-secret-change-me";
-}
-
-export async function signSessionToken(payload: SessionPayload): Promise<string> {
-  const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = crypto
-    .createHmac("sha256", getSessionSecret())
-    .update(data)
-    .digest("base64url");
-  return `${data}.${signature}`;
-}
-
-export function attachSessionCookie(response: NextResponse, token: string): NextResponse {
-  response.cookies.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7,
-  });
-  return response;
-}
-
-export async function getCurrentSession(): Promise<SessionPayload | null> {
+export async function POST(request: NextRequest) {
   try {
-    const user = await prisma.user.findFirst({
-      orderBy: { createdAt: "asc" },
+    const body = await request.json();
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: "Email et mot de passe requis." },
+        { status: 400 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return NextResponse.json(
+        { error: "Identifiants invalides." },
+        { status: 401 }
+      );
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      return NextResponse.json(
+        { error: "Identifiants invalides." },
+        { status: 401 }
+      );
+    }
+
+    const token = await signSessionToken({
+      userId: user.id,
+      email: user.email,
+      name: user.name,
     });
 
-    if (user) {
-      return {
-        userId: user.id,
-        email: user.email,
-        name: user.name,
-      };
-    }
-  } catch {
-    // Repli local si la base n'est pas encore prête
+    const response = NextResponse.json({
+      user: { id: user.id, email: user.email, name: user.name },
+    });
+    return attachSessionCookie(response, token);
+  } catch (error) {
+    console.error("Login error:", error);
+    return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
   }
-
-  return {
-    userId: "local-user",
-    email: "monssef@studentos.fr",
-    name: "Monssef",
-  };
-}
-
-export async function requireUser(): Promise<SessionPayload> {
-  const session = await getCurrentSession();
-  return (
-    session ?? {
-      userId: "local-user",
-      email: "monssef@studentos.fr",
-      name: "Monssef",
-    }
-  );
 }
