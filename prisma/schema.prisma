@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum MasteryLevel {
+  NOT_STARTED
+  COURSE_SEEN
+  TD_IN_PROGRESS
+  MASTERED
+}
+
+enum AssignmentType {
+  DS
+  TP
+  DM
+  PROJET
+  KHOLLE
+  REVISION
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  subjects         Subject[]
+  chapters         Chapter[]
+  assignments      Assignment[]
+  subjectResources SubjectResource[]
+
+  @@map("users")
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  name      String
+  color     String   @default("#3B82F6")
+  driveUrl  String?  @map("drive_url") @db.Text
+  notes     String?  @db.Text
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapters    Chapter[]
+  assignments Assignment[]
+  resources   SubjectResource[]
+
+  @@index([userId, sortOrder])
+  @@map("subjects")
+}
+
+model Chapter {
+  id             String       @id @default(cuid())
+  userId         String       @map("user_id")
+  subjectId      String       @map("subject_id")
+  number         Int
+  title          String
+  masteryLevel   MasteryLevel @default(NOT_STARTED) @map("mastery_level")
+  isPriority     Boolean      @default(false) @map("is_priority")
+  courseReviewed Boolean      @default(false) @map("course_reviewed")
+  summaryDone    Boolean      @default(false) @map("summary_done")
+  exercisesDone  Boolean      @default(false) @map("exercises_done")
+  pastExamsDone  Boolean      @default(false) @map("past_exams_done")
+  obsidianUrl    String?      @map("obsidian_url") @db.Text
+  driveUrl       String?      @map("drive_url") @db.Text
+  extraUrl       String?      @map("extra_url") @db.Text
+  quickNotes     String?      @map("quick_notes") @db.Text
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, subjectId, number])
+  @@map("chapters")
+}
+
+model Assignment {
+  id          String         @id @default(cuid())
+  userId      String         @map("user_id")
+  subjectId   String         @map("subject_id")
+  title       String
+  type        AssignmentType @default(DS)
+  dueDate     DateTime       @map("due_date")
+  isCompleted Boolean        @default(false) @map("is_completed")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dueDate])
+  @@index([subjectId])
+  @@map("assignments")
+}
+
+model SubjectResource {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  subjectId String   @map("subject_id")
+  label     String
+  url       String   @db.Text
+  category  String   @default("Général")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([subjectId])
+  @@map("subject_resources")
+}
