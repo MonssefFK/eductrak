@@ -5,6 +5,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SubjectDetailClient } from "@/components/subject/SubjectDetailClient";
 
+
 export default async function SubjectPage({
   params,
   searchParams,
