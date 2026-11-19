@@ -61,11 +61,10 @@ export function SubjectDetailClient({
   const [notes, setNotes] = useState(subject.notes || "");
   const [savingNotes, setSavingNotes] = useState(false);
 
-  const [selectedChapter, setSelectedChapter] = useState<ChapterData null |>(
-    () =>
-      initialSelectedChapterId
-        ? initialChapters.find((c) => c.id === initialSelectedChapterId) || null
-        : null
+  const [selectedChapter, setSelectedChapter] = useState<ChapterData | null>(
+    initialSelectedChapterId
+      ? initialChapters.find((c) => c.id === initialSelectedChapterId) || null
+      : null
   );
 
   // Modales d'ajout
@@ -230,31 +229,33 @@ export function SubjectDetailClient({
                 rel="noreferrer"
                 className="px-3 py-1.5 text-xs bg-[#0F1117] hover:bg-[#1D2330] text-zinc-300 border border-[#262C3A] rounded-lg flex items-center gap-1.5 transition-colors"
               >
-                <FolderOpen className="w-3.5 h-3.5 text-amber-400"/>
+                <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
                 <span>Drive matière</span>
-                <ExternalLink className="w-3 h-3 text-zinc-500"/>
+                <ExternalLink className="w-3 h-3 text-zinc-500" />
               </a>
             )}
 
             {activeTab === "chapters" && (
               <button
+                type="button"
                 onClick={() => {
                   setNewChNumber(chapters.length + 1);
                   setNewChapterOpen(true);
                 }}
                 className="px-3.5 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5"/>
+                <Plus className="w-3.5 h-3.5" />
                 <span>Ajouter un chapitre</span>
               </button>
             )}
 
             {activeTab === "assignments" && (
               <button
+                type="button"
                 onClick={() => setNewAssignOpen(true)}
                 className="px-3.5 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5"/>
+                <Plus className="w-3.5 h-3.5" />
                 <span>Ajouter une échéance</span>
               </button>
             )}
@@ -280,6 +281,7 @@ export function SubjectDetailClient({
         {/* Sous-navigation par onglets */}
         <div className="flex items-center gap-6 border-t border-[#222836] mt-5 pt-3 text-xs">
           <button
+            type="button"
             onClick={() => setActiveTab("chapters")}
             className={`pb-2 border-b-2 transition-colors cursor-pointer ${
               activeTab === "chapters"
@@ -290,6 +292,7 @@ export function SubjectDetailClient({
             Chapitres ({chapters.length})
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab("assignments")}
             className={`pb-2 border-b-2 transition-colors cursor-pointer ${
               activeTab === "assignments"
@@ -300,6 +303,7 @@ export function SubjectDetailClient({
             Devoirs & Examens ({assignments.length})
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab("resources")}
             className={`pb-2 border-b-2 transition-colors cursor-pointer ${
               activeTab === "resources"
@@ -321,7 +325,12 @@ export function SubjectDetailClient({
             </div>
           ) : (
             chapters.map((ch) => {
-              const meta = MASTERY_META[ch.masteryLevel];
+              const meta = MASTERY_META[ch.masteryLevel] || {
+                label: ch.masteryLevel,
+                badgeBg: "bg-sky-500/15",
+                badgeText: "text-sky-400",
+                borderColor: "border-sky-500/30",
+              };
               return (
                 <div
                   key={ch.id}
@@ -338,7 +347,7 @@ export function SubjectDetailClient({
                         title="Chapitre prioritaire"
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-rose-500/15 text-rose-400 border border-rose-500/30 shrink-0"
                       >
-                        <AlertCircle className="w-3 h-3"/>
+                        <AlertCircle className="w-3 h-3" />
                         Priorité
                       </span>
                     )}
@@ -374,14 +383,14 @@ export function SubjectDetailClient({
                         title="Ouvrir dans Obsidian"
                         className="w-8 h-8 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 transition-colors"
                       >
-                        <FileText className="w-4 h-4"/>
+                        <FileText className="w-4 h-4" />
                       </a>
                     ) : (
                       <span
                         title="Aucun lien Obsidian"
                         className="w-8 h-8 rounded-lg bg-[#0F1117] border border-[#222836] flex items-center justify-center text-zinc-700"
                       >
-                        <FileText className="w-4 h-4"/>
+                        <FileText className="w-4 h-4" />
                       </span>
                     )}
 
@@ -394,14 +403,14 @@ export function SubjectDetailClient({
                         title="Ouvrir sur Google Drive"
                         className="w-8 h-8 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 transition-colors"
                       >
-                        <FolderOpen className="w-4 h-4"/>
+                        <FolderOpen className="w-4 h-4" />
                       </a>
                     ) : (
                       <span
                         title="Aucun lien Drive"
                         className="w-8 h-8 rounded-lg bg-[#0F1117] border border-[#222836] flex items-center justify-center text-zinc-700"
                       >
-                        <FolderOpen className="w-4 h-4"/>
+                        <FolderOpen className="w-4 h-4" />
                       </span>
                     )}
                   </div>
@@ -427,6 +436,7 @@ export function SubjectDetailClient({
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <button
+                    type="button"
                     onClick={() => toggleAssignment(a.id, a.isCompleted)}
                     className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 cursor-pointer ${
                       a.isCompleted
@@ -434,7 +444,7 @@ export function SubjectDetailClient({
                         : "border-[#343C4E] bg-[#0F1117]"
                     }`}
                   >
-                    {a.isCompleted && <Check className="w-3.5 h-3.5"/>}
+                    {a.isCompleted && <Check className="w-3.5 h-3.5" />}
                   </button>
 
                   <span className="px-2 py-0.5 rounded text-[11px] bg-[#0F1117] border border-[#262C3A] text-zinc-300 shrink-0">
@@ -535,14 +545,15 @@ export function SubjectDetailClient({
                       className="text-zinc-200 hover:text-indigo-400 truncate flex items-center gap-1"
                     >
                       <span>{r.label}</span>
-                      <ExternalLink className="w-3 h-3 shrink-0"/>
+                      <ExternalLink className="w-3 h-3 shrink-0" />
                     </a>
                   </div>
                   <button
+                    type="button"
                     onClick={() => handleDeleteResource(r.id)}
-                    className="text-zinc-500 hover:text-red-400 p-1"
+                    className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5"/>
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ))}
@@ -564,6 +575,7 @@ export function SubjectDetailClient({
             </div>
             <div className="flex justify-end">
               <button
+                type="button"
                 onClick={handleSaveSubjectNotes}
                 disabled={savingNotes}
                 className="px-3.5 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg cursor-pointer"
@@ -576,7 +588,9 @@ export function SubjectDetailClient({
       )}
 
       {/* Tiroir Latéral Chapitre */}
-      <ChapterSlideOver chapter="{selectedChapter}" onClose="{()"> setSelectedChapter(null)}
+      <ChapterSlideOver
+        chapter={selectedChapter}
+        onClose={() => setSelectedChapter(null)}
         onSave={(updated) => {
           setChapters((prev) =>
             prev
@@ -629,13 +643,13 @@ export function SubjectDetailClient({
               <button
                 type="button"
                 onClick={() => setNewChapterOpen(false)}
-                className="px-3 py-1.5 text-xs text-zinc-400 border border-[#262C3A] rounded-lg"
+                className="px-3 py-1.5 text-xs text-zinc-400 border border-[#262C3A] rounded-lg cursor-pointer"
               >
                 Annuler
               </button>
               <button
                 type="submit"
-                className="px-3.5 py-1.5 text-xs bg-indigo-600 text-white rounded-lg"
+                className="px-3.5 py-1.5 text-xs bg-indigo-600 text-white rounded-lg cursor-pointer"
               >
                 Ajouter
               </button>
@@ -698,13 +712,13 @@ export function SubjectDetailClient({
               <button
                 type="button"
                 onClick={() => setNewAssignOpen(false)}
-                className="px-3 py-1.5 text-xs text-zinc-400 border border-[#262C3A] rounded-lg"
+                className="px-3 py-1.5 text-xs text-zinc-400 border border-[#262C3A] rounded-lg cursor-pointer"
               >
                 Annuler
               </button>
               <button
                 type="submit"
-                className="px-3.5 py-1.5 text-xs bg-indigo-600 text-white rounded-lg"
+                className="px-3.5 py-1.5 text-xs bg-indigo-600 text-white rounded-lg cursor-pointer"
               >
                 Créer
               </button>

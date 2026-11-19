@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutGrid,
   CalendarDays,
   Plus,
-  LogOut,
   Menu,
   X,
 } from "lucide-react";
@@ -28,15 +27,8 @@ export function Sidebar({
   subjects: SidebarSubject[];
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-
-  async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
-  }
 
   const navContent = (
     <div className="flex flex-col h-full bg-[#13161F] border-r border-[#222734] select-none">
@@ -51,13 +43,6 @@ export function Sidebar({
             <div className="text-[11px] text-zinc-500">Semestre STPI2</div>
           </div>
         </div>
-        <button
-          onClick={handleLogout}
-          title="Se déconnecter"
-          className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-[#1C212E] rounded-md transition-colors cursor-pointer"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
       </div>
 
       {/* Navigation principale */}
@@ -167,14 +152,8 @@ export function Sidebar({
           >
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <span className="text-sm text-white">Student OS — STPI2</span>
+          <span className="text-sm text-white">EducTrack — STPI2</span>
         </div>
-        <button
-          onClick={handleLogout}
-          className="p-1.5 text-zinc-400 hover:text-red-400"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
       </div>
 
       {/* Tiroir mobile */}

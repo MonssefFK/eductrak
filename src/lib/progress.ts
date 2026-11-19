@@ -17,6 +17,12 @@ export const MASTERY_META: Record<
     badgeText: "text-zinc-300",
     borderColor: "border-zinc-700",
   },
+  IN_PROGRESS: {
+    label: "En cours",
+    badgeBg: "bg-sky-500/15",
+    badgeText: "text-sky-400",
+    borderColor: "border-sky-500/30",
+  },
   COURSE_SEEN: {
     label: "Cours vu",
     badgeBg: "bg-sky-500/15",

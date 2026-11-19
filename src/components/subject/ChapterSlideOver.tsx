@@ -32,7 +32,7 @@ export function ChapterSlideOver({
   onSave: (updated: ChapterData) => void;
   onDelete: (id: string) => void;
 }) {
-  const [form, setForm] = useState<ChapterData null |>(chapter);
+  const [form, setForm] = useState<ChapterData | null>(chapter);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {

@@ -176,9 +176,12 @@ export function OverviewClient({
 
       {/* Grille des matières */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {subjects.map((subject) => (
-          <Link className="bg-[#161B22] hover:bg-[#1B212B] border border-[#262C3A] hover:border-[#374151] rounded-xl p-3.5 transition-colors group" href="{`/subjects/${subject.id}`}" key="{subject.id}">
-            <div className="flex items-center justify-between gap-2 mb-2">
+        {subjects.map((subject) => ( 
+<Link
+            key={subject.id}
+            href={`/subjects/${subject.id}`}
+            className="bg-[#161B22] hover:bg-[#1B212B] border border-[#262C3A] hover:border-[#374151] rounded-xl p-3.5 transition-colors group"
+          >            <div className="flex items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2 min-w-0">
                 <span
                   className="w-2.5 h-2.5 rounded-full shrink-0"

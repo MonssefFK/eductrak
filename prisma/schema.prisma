@@ -8,6 +8,7 @@ datasource db {
 
 enum MasteryLevel {
   NOT_STARTED
+  IN_PROGRESS
   COURSE_SEEN
   TD_IN_PROGRESS
   MASTERED
@@ -20,6 +21,7 @@ enum AssignmentType {
   PROJET
   KHOLLE
   REVISION
+  Devoir
 }
 
 model User {
