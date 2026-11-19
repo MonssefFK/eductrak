@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaClient, MasteryLevel, AssignmentType } from "@prisma/client";
-import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -8,7 +9,8 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL est manquant dans .env");
 }
 
-const adapter = new PrismaMariaDb(databaseUrl);
+const pool = new Pool({ connectionString: databaseUrl });
+const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
@@ -225,4 +227,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await pool.end();
   });
