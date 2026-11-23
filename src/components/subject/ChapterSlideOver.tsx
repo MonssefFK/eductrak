@@ -118,7 +118,7 @@ export function ChapterSlideOver({
               <label className="block text-xs text-zinc-400 mb-1">N°</label>
               <input
                 type="number"
-                min={1}
+                min={0}
                 value={form.number}
                 onChange={(e) =>
                   setForm({ ...form, number: Number(e.target.value) })

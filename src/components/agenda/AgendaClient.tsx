@@ -31,6 +31,7 @@ interface SubjectOption {
 
 const ASSIGNMENT_TYPES: { value: string; label: string }[] = [
   { value: "DEVOIR", label: "Devoir" },
+  { value: "CC", label: "CC" },
   { value: "DS", label: "DS" },
   { value: "DM", label: "DM" },
   { value: "TP", label: "TP" },

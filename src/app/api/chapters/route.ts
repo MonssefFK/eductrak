@@ -1,47 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
-import { MasteryLevel } from "@prisma/client";
+import { getCurrentSession } from "@/lib/auth";
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const user = await requireUser();
-    const body = await request.json();
+    const session = await getCurrentSession();
+    if (!session) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
 
-    const subjectId = String(body.subjectId || "");
+    const body = await req.json();
+    const subjectId = String(body.subjectId || "").trim();
     const title = String(body.title || "").trim();
-    const number = Number(body.number || 1);
+    const rawNumber = Number(body.number);
+    const number =
+      Number.isFinite(rawNumber) && rawNumber >= 0 ? Math.trunc(rawNumber) : 0;
 
     if (!subjectId || !title) {
       return NextResponse.json(
-        { error: "Matière et titre requis." },
+        { error: "Champs manquants" },
         { status: 400 }
       );
     }
 
     const subject = await prisma.subject.findFirst({
-      where: { id: subjectId, userId: user.userId },
+      where: { id: subjectId, userId: session.userId },
+      select: { id: true },
     });
+
     if (!subject) {
-      return NextResponse.json({ error: "Matière introuvable" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Matière introuvable" },
+        { status: 404 }
+      );
     }
 
-    const chapter = await prisma.chapter.create({
+    const created = await prisma.chapter.create({
       data: {
-        userId: user.userId,
-        subjectId,
+        userId: session.userId,
+        subjectId: subject.id,
         number,
         title,
-        masteryLevel: (body.masteryLevel as MasteryLevel) || "NOT_STARTED",
-        isPriority: Boolean(body.isPriority),
-        driveUrl: body.driveUrl ? String(body.driveUrl).trim() : null,
-        obsidianUrl: body.obsidianUrl ? String(body.obsidianUrl).trim() : null,
-        extraUrl: body.extraUrl ? String(body.extraUrl).trim() : null,
       },
     });
 
-    return NextResponse.json(chapter, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Erreur création chapitre" }, { status: 500 });
+    return NextResponse.json(created, { status: 201 });
+  } catch (err) {
+    console.error("POST /api/chapters error:", err);
+    return NextResponse.json(
+      { error: "Erreur création chapitre" },
+      { status: 500 }
+    );
   }
 }

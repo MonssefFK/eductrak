@@ -21,7 +21,7 @@ enum AssignmentType {
   PROJET
   KHOLLE
   REVISION
-  Devoir
+  CC
 }
 
 model User {

@@ -32,6 +32,7 @@ interface ResourceRow {
 
 const ASSIGNMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "DEVOIR", label: "Devoir" },
+  { value: "CC", label: "CC" },
   { value: "DS", label: "DS" },
   { value: "TP", label: "TP" },
   { value: "DM", label: "DM" },
@@ -393,6 +394,7 @@ export function SubjectDetailClient({
             </div>
           ) : (
             chapters.map((ch) => {
+              const isAnnex = ch.number === 0;
               const meta = MASTERY_META[ch.masteryLevel] || {
                 label: ch.masteryLevel,
                 badgeBg: "bg-sky-500/15",
@@ -403,12 +405,27 @@ export function SubjectDetailClient({
                 <div
                   key={ch.id}
                   onClick={() => setSelectedChapter(ch)}
-                  className="bg-[#161B22] hover:bg-[#1B212C] border border-[#262C3A] hover:border-[#384154] rounded-xl px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-colors"
+                  className={`rounded-xl px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-colors border ${
+                    isAnnex
+                      ? "bg-[#141923] hover:bg-[#19202D] border-amber-500/25 hover:border-amber-400/45"
+                      : "bg-[#161B22] hover:bg-[#1B212C] border-[#262C3A] hover:border-[#384154]"
+                  }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-sm text-zinc-200 truncate">
-                      Ch. {ch.number} - {ch.title}
-                    </span>
+                    {isAnnex ? (
+                      <>
+                        <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                          Annexe / Doc
+                        </span>
+                        <span className="text-sm font-serif italic text-amber-200 truncate">
+                          {ch.title}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-zinc-200 truncate">
+                        Ch. {ch.number} - {ch.title}
+                      </span>
+                    )}
 
                     {ch.isPriority && (
                       <span
@@ -691,7 +708,7 @@ export function SubjectDetailClient({
                 <label className="block text-xs text-zinc-400 mb-1">N°</label>
                 <input
                   type="number"
-                  min={1}
+                  min={0}
                   required
                   value={newChNumber}
                   onChange={(e) => setNewChNumber(Number(e.target.value))}
