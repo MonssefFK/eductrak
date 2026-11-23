@@ -71,6 +71,9 @@ export function SubjectDetailClient({
   const [notes, setNotes] = useState(subject.notes || "");
   const [savingNotes, setSavingNotes] = useState(false);
   const [deletingSubject, setDeletingSubject] = useState(false);
+  const [deletingAssignmentId, setDeletingAssignmentId] = useState<string | null>(
+    null
+  );
 
   const [selectedChapter, setSelectedChapter] = useState<ChapterData | null>(
     initialSelectedChapterId
@@ -78,7 +81,6 @@ export function SubjectDetailClient({
       : null
   );
 
-  // Modales d'ajout
   const [newChapterOpen, setNewChapterOpen] = useState(false);
   const [newChTitle, setNewChTitle] = useState("");
   const [newChNumber, setNewChNumber] = useState(initialChapters.length + 1);
@@ -88,7 +90,6 @@ export function SubjectDetailClient({
   const [newAssignType, setNewAssignType] = useState<string>("DEVOIR");
   const [newAssignDate, setNewAssignDate] = useState("");
 
-  // Ajout ressource
   const [resLabel, setResLabel] = useState("");
   const [resUrl, setResUrl] = useState("");
   const [resCategory, setResCategory] = useState("Drive");
@@ -176,6 +177,33 @@ export function SubjectDetailClient({
     router.refresh();
   }
 
+  async function handleDeleteAssignment(assignment: AssignmentRow) {
+    if (deletingAssignmentId === assignment.id) return;
+    const confirmed = window.confirm(
+      `Supprimer l'échéance "${assignment.title}" ?`
+    );
+    if (!confirmed) return;
+
+    const prevList = assignments;
+    setDeletingAssignmentId(assignment.id);
+    setAssignments((prev) => prev.filter((a) => a.id !== assignment.id));
+
+    try {
+      const res = await fetch(`/api/assignments/${assignment.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setAssignments(prevList);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setAssignments(prevList);
+    } finally {
+      setDeletingAssignmentId(null);
+    }
+  }
+
   async function handleAddResource(e: React.FormEvent) {
     e.preventDefault();
     if (!resLabel.trim() || !resUrl.trim()) return;
@@ -242,7 +270,6 @@ export function SubjectDetailClient({
 
   return (
     <div className="space-y-6">
-      {/* En-tête matière */}
       <div className="bg-[#161B22] border border-[#262C3A] rounded-xl p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-3">
@@ -306,7 +333,6 @@ export function SubjectDetailClient({
           </div>
         </div>
 
-        {/* Barre de progression globale de la matière */}
         <div className="flex items-center gap-4">
           <div className="flex-1 h-2 bg-[#0F1117] rounded-full overflow-hidden border border-[#262C3A]">
             <div
@@ -322,7 +348,6 @@ export function SubjectDetailClient({
           </span>
         </div>
 
-        {/* Sous-navigation par onglets */}
         <div className="flex items-center gap-6 border-t border-[#222836] mt-5 pt-3 text-xs">
           <button
             type="button"
@@ -360,7 +385,6 @@ export function SubjectDetailClient({
         </div>
       </div>
 
-      {/* ONGLET 1 : CHAPITRES */}
       {activeTab === "chapters" && (
         <div className="space-y-2.5">
           {chapters.length === 0 ? (
@@ -401,7 +425,6 @@ export function SubjectDetailClient({
                     className="flex items-center gap-2.5 shrink-0"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {/* Sélecteur rapide de niveau */}
                     <select
                       value={ch.masteryLevel}
                       onChange={(e) => handleQuickMasteryChange(e, ch.id)}
@@ -420,7 +443,6 @@ export function SubjectDetailClient({
                       )}
                     </select>
 
-                    {/* Bouton rapide Obsidian */}
                     {ch.obsidianUrl ? (
                       <a
                         href={ch.obsidianUrl}
@@ -438,7 +460,6 @@ export function SubjectDetailClient({
                       </span>
                     )}
 
-                    {/* Bouton rapide Google Drive */}
                     {ch.driveUrl ? (
                       <a
                         href={ch.driveUrl}
@@ -465,7 +486,6 @@ export function SubjectDetailClient({
         </div>
       )}
 
-      {/* ONGLET 2 : DEVOIRS & EXAMENS */}
       {activeTab === "assignments" && (
         <div className="bg-[#161B22] border border-[#262C3A] rounded-xl divide-y divide-[#222836]">
           {assignments.length === 0 ? (
@@ -476,7 +496,7 @@ export function SubjectDetailClient({
             assignments.map((a) => (
               <div
                 key={a.id}
-                className="px-4 py-3 flex items-center justify-between gap-4"
+                className="px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <button
@@ -506,7 +526,7 @@ export function SubjectDetailClient({
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0 text-xs">
+                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 text-xs">
                   <span className="text-zinc-400 tabular-nums">
                     {new Date(a.dueDate).toLocaleDateString("fr-FR", {
                       day: "2-digit",
@@ -523,6 +543,16 @@ export function SubjectDetailClient({
                   >
                     {a.isCompleted ? "Terminé" : "À faire"}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAssignment(a)}
+                    disabled={deletingAssignmentId === a.id}
+                    title="Supprimer l'échéance"
+                    aria-label="Supprimer l'échéance"
+                    className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ))
@@ -530,7 +560,6 @@ export function SubjectDetailClient({
         </div>
       )}
 
-      {/* ONGLET 3 : RESSOURCES & NOTES */}
       {activeTab === "resources" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-[#161B22] border border-[#262C3A] rounded-xl p-4 space-y-4">
@@ -631,7 +660,6 @@ export function SubjectDetailClient({
         </div>
       )}
 
-      {/* Tiroir Latéral Chapitre */}
       <ChapterSlideOver
         chapter={selectedChapter}
         onClose={() => setSelectedChapter(null)}
@@ -651,7 +679,6 @@ export function SubjectDetailClient({
         }}
       />
 
-      {/* Modale Ajout Chapitre */}
       {newChapterOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
           <form
@@ -702,7 +729,6 @@ export function SubjectDetailClient({
         </div>
       )}
 
-      {/* Modale Ajout Devoir */}
       {newAssignOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
           <form
