@@ -442,23 +442,25 @@ export function SubjectDetailClient({
                     className="flex items-center gap-2.5 shrink-0"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <select
-                      value={ch.masteryLevel}
-                      onChange={(e) => handleQuickMasteryChange(e, ch.id)}
-                      className={`px-2.5 py-1 rounded-full text-xs border cursor-pointer focus:outline-none ${meta.badgeBg} ${meta.badgeText} ${meta.borderColor}`}
-                    >
-                      {(Object.keys(MASTERY_META) as MasteryLevel[]).map(
-                        (lvl) => (
-                          <option
-                            key={lvl}
-                            value={lvl}
-                            className="bg-[#161B22] text-zinc-200"
-                          >
-                            {MASTERY_META[lvl].label}
-                          </option>
-                        )
-                      )}
-                    </select>
+                    {!isAnnex && (
+                      <select
+                        value={ch.masteryLevel}
+                        onChange={(e) => handleQuickMasteryChange(e, ch.id)}
+                        className={`px-2.5 py-1 rounded-full text-xs border cursor-pointer focus:outline-none ${meta.badgeBg} ${meta.badgeText} ${meta.borderColor}`}
+                      >
+                        {(Object.keys(MASTERY_META) as MasteryLevel[]).map(
+                          (lvl) => (
+                            <option
+                              key={lvl}
+                              value={lvl}
+                              className="bg-[#161B22] text-zinc-200"
+                            >
+                              {MASTERY_META[lvl].label}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    )}
 
                     {ch.obsidianUrl ? (
                       <a

@@ -45,11 +45,16 @@ export const MASTERY_META: Record<
 };
 
 export interface ChapterProgressInput {
+  number?: number;
   masteryLevel: MasteryLevel;
   courseReviewed?: boolean;
   summaryDone?: boolean;
   exercisesDone?: boolean;
   pastExamsDone?: boolean;
+}
+
+function isTrackedChapter(chapter: ChapterProgressInput): boolean {
+  return (chapter.number ?? 1) !== 0;
 }
 
 export function computeChapterScore(chapter: ChapterProgressInput): number {
@@ -69,14 +74,16 @@ export function computeChapterScore(chapter: ChapterProgressInput): number {
 
 export function computeSubjectProgress(chapters: ChapterProgressInput[]): number {
   if (!chapters || chapters.length === 0) return 0;
-  const total = chapters.reduce((acc, ch) => acc + computeChapterScore(ch), 0);
-  return Math.round((total / chapters.length) * 100);
+  const tracked = chapters.filter(isTrackedChapter);
+  if (tracked.length === 0) return 0;
+  const total = tracked.reduce((acc, ch) => acc + computeChapterScore(ch), 0);
+  return Math.round((total / tracked.length) * 100);
 }
 
 export function computeGlobalStats(
   subjects: { chapters: ChapterProgressInput[] }[]
 ) {
-  const allChapters = subjects.flatMap((s) => s.chapters);
+  const allChapters = subjects.flatMap((s) => s.chapters).filter(isTrackedChapter);
   const totalChapters = allChapters.length;
   const masteredChapters = allChapters.filter(
     (c) => c.masteryLevel === "MASTERED"
