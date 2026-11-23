@@ -83,13 +83,17 @@ export function AgendaClient({
   const [assignments, setAssignments] =
     useState<AgendaAssignment[]>(initialAssignments);
   const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [pickerMonth, setPickerMonth] = useState<Date>(
-    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  const [pickerYear, setPickerYear] = useState<number>(() =>
+    new Date().getFullYear()
   );
-  const calendarPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [pickerMonthIndex, setPickerMonthIndex] = useState<number>(() =>
+    new Date().getMonth()
+  );
 
   const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(
     null
@@ -104,18 +108,16 @@ export function AgendaClient({
   const typeMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (!newSubjectId && subjects[0]?.id) {
+      setNewSubjectId(subjects[0].id);
+    }
+  }, [subjects, newSubjectId]);
+
+  useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        typeMenuRef.current &&
-        !typeMenuRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node;
+      if (typeMenuRef.current && !typeMenuRef.current.contains(target)) {
         setTypeMenuOpen(false);
-      }
-      if (
-        calendarPopoverRef.current &&
-        !calendarPopoverRef.current.contains(event.target as Node)
-      ) {
-        setCalendarOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -180,34 +182,52 @@ export function AgendaClient({
   );
 
   const monthCells = useMemo(() => {
-    const year = pickerMonth.getFullYear();
-    const month = pickerMonth.getMonth();
-    const firstOfMonth = new Date(year, month, 1);
+    const firstOfMonth = new Date(pickerYear, pickerMonthIndex, 1);
     const startOffset = (firstOfMonth.getDay() + 6) % 7;
-    const gridStart = new Date(year, month, 1 - startOffset);
+    const gridStart = new Date(pickerYear, pickerMonthIndex, 1 - startOffset);
 
     return Array.from({ length: 42 }, (_, idx) => {
       const date = new Date(gridStart);
       date.setDate(gridStart.getDate() + idx);
       return {
         date,
-        inCurrentMonth: date.getMonth() === month,
+        inCurrentMonth: date.getMonth() === pickerMonthIndex,
       };
     });
-  }, [pickerMonth]);
+  }, [pickerYear, pickerMonthIndex]);
 
   const pickerMonthLabel = useMemo(() => {
-    return pickerMonth.toLocaleDateString("fr-FR", {
-      month: "long",
-      year: "numeric",
-    });
-  }, [pickerMonth]);
-
-  function openCalendarPopover() {
-    setPickerMonth(
-      new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
+    return new Date(pickerYear, pickerMonthIndex, 1).toLocaleDateString(
+      "fr-FR",
+      {
+        month: "long",
+        year: "numeric",
+      }
     );
-    setCalendarOpen((prev) => !prev);
+  }, [pickerYear, pickerMonthIndex]);
+
+  function openCalendarModal() {
+    setPickerYear(selectedDate.getFullYear());
+    setPickerMonthIndex(selectedDate.getMonth());
+    setCalendarOpen(true);
+  }
+
+  function goPrevMonth() {
+    if (pickerMonthIndex === 0) {
+      setPickerMonthIndex(11);
+      setPickerYear((y) => y - 1);
+    } else {
+      setPickerMonthIndex((m) => m - 1);
+    }
+  }
+
+  function goNextMonth() {
+    if (pickerMonthIndex === 11) {
+      setPickerMonthIndex(0);
+      setPickerYear((y) => y + 1);
+    } else {
+      setPickerMonthIndex((m) => m + 1);
+    }
   }
 
   function handleSelectCalendarDate(date: Date) {
@@ -220,15 +240,17 @@ export function AgendaClient({
   function handleJumpToToday() {
     const today = new Date();
     setSelectedDate(today);
-    setPickerMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setPickerYear(today.getFullYear());
+    setPickerMonthIndex(today.getMonth());
     setCalendarOpen(false);
   }
 
   function openModalForDate(date: Date) {
-    if (!newSubjectId && subjects[0]?.id) {
-      setNewSubjectId(subjects[0].id);
-    }
+    setSubmitError(null);
+    const targetSubjectId = newSubjectId || subjects[0]?.id || "";
+    setNewSubjectId(targetSubjectId);
     setNewDate(toDateInputValue(date));
+    setTypeMenuOpen(false);
     setModalOpen(true);
   }
 
@@ -273,23 +295,47 @@ export function AgendaClient({
 
   async function handleCreateAssignment(e: React.FormEvent) {
     e.preventDefault();
-    if (!newSubjectId || !newTitle.trim() || !newDate) return;
+    setSubmitError(null);
 
-    const res = await fetch("/api/assignments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        subjectId: newSubjectId,
-        title: newTitle.trim(),
-        type: newType,
-        dueDate: newDate,
-      }),
-    });
+    const subjectIdToUse = newSubjectId || subjects[0]?.id || "";
+    if (!subjectIdToUse) {
+      setSubmitError("Aucune matière sélectionnée.");
+      return;
+    }
+    if (!newTitle.trim()) {
+      setSubmitError("Titre manquant.");
+      return;
+    }
+    if (!newDate) {
+      setSubmitError("Date manquante.");
+      return;
+    }
+    if (submitting) return;
 
-    if (res.ok) {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectId: subjectIdToUse,
+          title: newTitle.trim(),
+          type: newType,
+          dueDate: newDate,
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        setSubmitError(
+          `Erreur ${res.status} : ${errText || "Requête refusée"}`
+        );
+        return;
+      }
+
       const created = await res.json();
-      const matchedSubject = subjects.find((s) => s.id === newSubjectId) || {
-        id: newSubjectId,
+      const matchedSubject = subjects.find((s) => s.id === subjectIdToUse) || {
+        id: subjectIdToUse,
         name: "Matière",
         color: "#6366f1",
       };
@@ -310,119 +356,18 @@ export function AgendaClient({
       }
 
       setNewTitle("");
+      setSubmitError(null);
       setTypeMenuOpen(false);
       setModalOpen(false);
       router.refresh();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Erreur réseau");
+    } finally {
+      setSubmitting(false);
     }
   }
 
   const selectedTypeLabel = formatTypeLabel(newType);
-
-  function renderCalendarPicker() {
-    return (
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-72 bg-[#161B22] border border-[#2C3446] rounded-xl p-3.5 shadow-2xl space-y-3"
-      >
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() =>
-              setPickerMonth(
-                (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
-              )
-            }
-            aria-label="Mois précédent"
-            className="p-1.5 text-zinc-400 hover:text-white hover:bg-[#222836] rounded-lg cursor-pointer"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-
-          <span className="text-xs font-medium text-white capitalize">
-            {pickerMonthLabel}
-          </span>
-
-          <button
-            type="button"
-            onClick={() =>
-              setPickerMonth(
-                (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
-              )
-            }
-            aria-label="Mois suivant"
-            className="p-1.5 text-zinc-400 hover:text-white hover:bg-[#222836] rounded-lg cursor-pointer"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-7 gap-1 text-center">
-          {MONTH_DAYS_FR.map((label) => (
-            <span
-              key={label}
-              className="text-[10px] text-zinc-500 py-1 select-none"
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7 gap-1">
-          {monthCells.map(({ date, inCurrentMonth }, idx) => {
-            const isSelected = isSameDay(date, selectedDate);
-            const isTodayCell = isSameDay(date, new Date());
-            const hasEvents = filteredAssignments.some((a) =>
-              isSameDay(new Date(a.dueDate), date)
-            );
-
-            return (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleSelectCalendarDate(date)}
-                className={`h-8 rounded-lg text-xs tabular-nums flex flex-col items-center justify-center relative transition-colors cursor-pointer ${
-                  isSelected
-                    ? "bg-indigo-600 text-white"
-                    : isTodayCell
-                    ? "bg-[#1E2536] text-indigo-300 border border-indigo-500/40"
-                    : inCurrentMonth
-                    ? "text-zinc-200 hover:bg-[#222836]"
-                    : "text-zinc-600 hover:bg-[#1C2230]"
-                }`}
-              >
-                <span>{date.getDate()}</span>
-                {hasEvents && (
-                  <span
-                    className={`w-1 h-1 rounded-full mt-0.5 ${
-                      isSelected ? "bg-white" : "bg-indigo-400"
-                    }`}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="pt-2 border-t border-[#222836] flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={handleJumpToToday}
-            className="px-2.5 py-1 text-[11px] bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg cursor-pointer"
-          >
-            Aller à aujourd&apos;hui
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setCalendarOpen(false)}
-            className="px-2.5 py-1 text-[11px] text-zinc-400 hover:text-white rounded-lg cursor-pointer"
-          >
-            Fermer
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   function renderAssignmentCard(item: AgendaAssignment, compact = false) {
     const color = item.subject?.color || "#6366f1";
@@ -523,12 +468,8 @@ export function AgendaClient({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Navigation semaine + Aujourd'hui (calendrier) */}
-          <div
-            ref={calendarPopoverRef}
-            className="hidden md:flex items-center gap-1 bg-[#161B22] border border-[#262C3A] rounded-lg p-1 relative"
-          >
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
+          <div className="hidden md:flex items-center gap-1 bg-[#161B22] border border-[#262C3A] rounded-lg p-1">
             <button
               type="button"
               onClick={() => shiftWeek(-1)}
@@ -539,7 +480,7 @@ export function AgendaClient({
             </button>
             <button
               type="button"
-              onClick={openCalendarPopover}
+              onClick={openCalendarModal}
               className="px-2.5 py-1 text-xs text-zinc-200 hover:text-white hover:bg-[#222836] rounded-md flex items-center gap-1.5 cursor-pointer"
             >
               <CalendarIcon className="w-3.5 h-3.5 text-indigo-400" />
@@ -553,19 +494,12 @@ export function AgendaClient({
             >
               <ChevronRight className="w-4 h-4" />
             </button>
-
-            {calendarOpen && (
-              <div className="hidden md:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-40">
-                {renderCalendarPicker()}
-              </div>
-            )}
           </div>
 
-          {/* Filtre par matière */}
           <select
             value={subjectFilter}
             onChange={(e) => setSubjectFilter(e.target.value)}
-            className="bg-[#161B22] border border-[#262C3A] rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+            className="w-full sm:w-auto bg-[#161B22] border border-[#262C3A] rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
           >
             <option value="ALL">Toutes les matières</option>
             {subjects.map((s) => (
@@ -578,7 +512,7 @@ export function AgendaClient({
           <button
             type="button"
             onClick={() => openModalForDate(selectedDate)}
-            className="px-3.5 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="w-full sm:w-auto px-3.5 py-2.5 sm:py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Ajouter une échéance</span>
@@ -586,7 +520,7 @@ export function AgendaClient({
         </div>
       </div>
 
-      {/* VUE MOBILE (< md) : 1 JOUR À LA FOIS */}
+      {/* VUE MOBILE (< md) */}
       <div className="md:hidden space-y-4">
         <div className="bg-[#161B22] border border-[#262C3A] rounded-xl p-3 space-y-3">
           <div className="flex items-center justify-between">
@@ -605,7 +539,7 @@ export function AgendaClient({
               </div>
               <button
                 type="button"
-                onClick={openCalendarPopover}
+                onClick={openCalendarModal}
                 className="text-[11px] text-indigo-400 hover:text-indigo-300 mt-0.5 inline-flex items-center gap-1 cursor-pointer"
               >
                 <CalendarIcon className="w-3 h-3" />
@@ -623,13 +557,6 @@ export function AgendaClient({
             </button>
           </div>
 
-          {calendarOpen && (
-            <div className="md:hidden flex justify-center pt-1">
-              {renderCalendarPicker()}
-            </div>
-          )}
-
-          {/* Bandeau des 7 jours de la semaine */}
           <div className="grid grid-cols-7 gap-1">
             {weekDays.map((day, idx) => {
               const active = isSameDay(day, selectedDate);
@@ -670,7 +597,6 @@ export function AgendaClient({
           </div>
         </div>
 
-        {/* Liste des blocs du jour sélectionné */}
         {selectedDayAssignments.length === 0 ? (
           <div className="bg-[#161B22] border border-[#262C3A] rounded-xl p-6 text-center space-y-3">
             <p className="text-xs text-zinc-400">
@@ -694,7 +620,7 @@ export function AgendaClient({
         )}
       </div>
 
-      {/* VUE PC (>= md) : SEMAINE COMPLÈTE EN COLONNES AÉRÉES */}
+      {/* VUE PC (>= md) */}
       <div className="hidden md:grid md:grid-cols-7 gap-3">
         {weekDays.map((day, idx) => {
           const today = isSameDay(day, new Date());
@@ -752,111 +678,216 @@ export function AgendaClient({
         })}
       </div>
 
+      {/* MODALE CALENDRIER */}
+      {calendarOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/75 overflow-y-auto"
+        >
+          <div className="min-h-full flex items-center justify-center p-4">
+            <div className="w-full max-w-xs bg-[#161B22] border border-[#2C3446] rounded-xl p-4 shadow-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={goPrevMonth}
+                  aria-label="Mois précédent"
+                  className="p-2.5 text-zinc-200 hover:text-white bg-[#0F1117] hover:bg-[#222836] border border-[#262C3A] rounded-lg cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <span className="text-xs text-white capitalize">
+                  {pickerMonthLabel}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={goNextMonth}
+                  aria-label="Mois suivant"
+                  className="p-2.5 text-zinc-200 hover:text-white bg-[#0F1117] hover:bg-[#222836] border border-[#262C3A] rounded-lg cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 text-center">
+                {MONTH_DAYS_FR.map((label) => (
+                  <span
+                    key={label}
+                    className="text-[10px] text-zinc-500 py-1 select-none"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1">
+                {monthCells.map(({ date, inCurrentMonth }, idx) => {
+                  const isSelected = isSameDay(date, selectedDate);
+                  const isTodayCell = isSameDay(date, new Date());
+                  const hasEvents = filteredAssignments.some((a) =>
+                    isSameDay(new Date(a.dueDate), date)
+                  );
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSelectCalendarDate(date)}
+                      className={`h-9 rounded-lg text-xs tabular-nums flex flex-col items-center justify-center relative transition-colors cursor-pointer ${
+                        isSelected
+                          ? "bg-indigo-600 text-white"
+                          : isTodayCell
+                          ? "bg-[#1E2536] text-indigo-300 border border-indigo-500/40"
+                          : inCurrentMonth
+                          ? "text-zinc-200 hover:bg-[#222836]"
+                          : "text-zinc-600 hover:bg-[#1C2230]"
+                      }`}
+                    >
+                      <span>{date.getDate()}</span>
+                      {hasEvents && (
+                        <span
+                          className={`w-1 h-1 rounded-full mt-0.5 ${
+                            isSelected ? "bg-white" : "bg-indigo-400"
+                          }`}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pt-2 border-t border-[#222836] flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={handleJumpToToday}
+                  className="px-2.5 py-1.5 text-[11px] bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg cursor-pointer"
+                >
+                  Aller à aujourd&apos;hui
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCalendarOpen(false)}
+                  className="px-2.5 py-1.5 text-[11px] text-zinc-400 hover:text-white rounded-lg cursor-pointer"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PANNEAU DE DÉTAIL AU CLIC SUR UN BLOC */}
       {activeAssignment && (
         <div
-          onClick={() => setActiveAssignmentId(null)}
-          className="fixed inset-0 z-50 bg-black/75 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/75 overflow-y-auto"
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              borderColor: `${activeAssignment.subject?.color || "#6366f1"}88`,
-            }}
-            className="w-full sm:max-w-md bg-[#161B22] border-t sm:border rounded-t-2xl sm:rounded-2xl p-5 space-y-4"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span
-                  style={{
-                    backgroundColor: activeAssignment.subject?.color || "#6366f1",
-                  }}
-                  className="w-3 h-3 rounded-full shrink-0"
-                />
-                <span className="text-xs text-zinc-300">
-                  {formatTypeLabel(activeAssignment.type)}
-                </span>
-              </div>
+          <div className="min-h-full flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div
+              style={{
+                borderColor: `${activeAssignment.subject?.color || "#6366f1"}88`,
+              }}
+              className="w-full sm:max-w-md bg-[#161B22] border-t sm:border rounded-t-2xl sm:rounded-2xl p-5 space-y-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    style={{
+                      backgroundColor:
+                        activeAssignment.subject?.color || "#6366f1",
+                    }}
+                    className="w-3 h-3 rounded-full shrink-0"
+                  />
+                  <span className="text-xs text-zinc-300">
+                    {formatTypeLabel(activeAssignment.type)}
+                  </span>
+                </div>
 
-              <button
-                type="button"
-                onClick={() => setActiveAssignmentId(null)}
-                className="p-1 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
-                aria-label="Fermer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <h2 className="text-base text-white leading-snug">
-              {activeAssignment.title}
-            </h2>
-
-            <div className="bg-[#0F1117] border border-[#262C3A] rounded-xl p-3.5 space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-400">Matière</span>
-                <span className="text-zinc-100">
-                  {activeAssignment.subject?.name}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-400">Date</span>
-                <span className="text-zinc-100 flex items-center gap-1.5 capitalize">
-                  <CalendarIcon className="w-3.5 h-3.5 text-zinc-400" />
-                  {new Date(activeAssignment.dueDate).toLocaleDateString(
-                    "fr-FR",
-                    {
-                      weekday: "long",
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    }
-                  )}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-400">Statut</span>
-                <span
-                  className={`px-2 py-0.5 rounded-md text-[11px] ${
-                    activeAssignment.isCompleted
-                      ? "bg-emerald-500/20 text-emerald-300"
-                      : "bg-amber-500/20 text-amber-300"
-                  }`}
+                <button
+                  type="button"
+                  onClick={() => setActiveAssignmentId(null)}
+                  className="p-1 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
+                  aria-label="Fermer"
                 >
-                  {activeAssignment.isCompleted ? "Terminé" : "À faire"}
-                </span>
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-            </div>
 
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => handleDeleteAssignment(activeAssignment.id)}
-                className="px-3 py-2 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 border border-rose-500/25 rounded-lg flex items-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Supprimer</span>
-              </button>
+              <h2 className="text-base text-white leading-snug">
+                {activeAssignment.title}
+              </h2>
 
-              <button
-                type="button"
-                onClick={() =>
-                  toggleCompleted(
-                    activeAssignment.id,
-                    activeAssignment.isCompleted
-                  )
-                }
-                className="px-4 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-1.5 cursor-pointer"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>
-                  {activeAssignment.isCompleted
-                    ? "Remettre à faire"
-                    : "Marquer terminé"}
-                </span>
-              </button>
+              <div className="bg-[#0F1117] border border-[#262C3A] rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400">Matière</span>
+                  <span className="text-zinc-100">
+                    {activeAssignment.subject?.name}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400">Date</span>
+                  <span className="text-zinc-100 flex items-center gap-1.5 capitalize">
+                    <CalendarIcon className="w-3.5 h-3.5 text-zinc-400" />
+                    {new Date(activeAssignment.dueDate).toLocaleDateString(
+                      "fr-FR",
+                      {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      }
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400">Statut</span>
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[11px] ${
+                      activeAssignment.isCompleted
+                        ? "bg-emerald-500/20 text-emerald-300"
+                        : "bg-amber-500/20 text-amber-300"
+                    }`}
+                  >
+                    {activeAssignment.isCompleted ? "Terminé" : "À faire"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteAssignment(activeAssignment.id)}
+                  className="px-3 py-2 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 border border-rose-500/25 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Supprimer</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    toggleCompleted(
+                      activeAssignment.id,
+                      activeAssignment.isCompleted
+                    )
+                  }
+                  className="px-4 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>
+                    {activeAssignment.isCompleted
+                      ? "Remettre à faire"
+                      : "Marquer terminé"}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -864,108 +895,134 @@ export function AgendaClient({
 
       {/* MODALE CRÉATION D'ÉCHÉANCE */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 overflow-y-auto py-8 px-4 flex items-center justify-center">
-          <form
-            onSubmit={handleCreateAssignment}
-            className="w-full max-w-md bg-[#161B22] border border-[#262C3A] rounded-xl p-5 space-y-4"
-          >
-            <h3 className="text-sm text-white">Ajouter une échéance</h3>
-
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">
-                Matière
-              </label>
-              <select
-                value={newSubjectId}
-                onChange={(e) => setNewSubjectId(e.target.value)}
-                className="w-full bg-[#0F1117] border border-[#262C3A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-              >
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Titre</label>
-              <input
-                type="text"
-                required
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="ex. Exercices séries numériques"
-                className="w-full bg-[#0F1117] border border-[#262C3A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div ref={typeMenuRef} className="relative">
-                <label className="block text-xs text-zinc-400 mb-1">Type</label>
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/75 overflow-y-auto"
+        >
+          <div className="min-h-full flex items-start sm:items-center justify-center py-8 px-4">
+            <form
+              onSubmit={handleCreateAssignment}
+              className="w-full max-w-md bg-[#161B22] border border-[#262C3A] rounded-xl p-5 space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm text-white">Ajouter une échéance</h3>
                 <button
                   type="button"
-                  onClick={() => setTypeMenuOpen((prev) => !prev)}
-                  className="w-full bg-[#0F1117] border border-[#262C3A] hover:border-[#374151] rounded-lg px-2.5 py-2 text-xs text-white flex items-center justify-between focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  onClick={() => {
+                    setTypeMenuOpen(false);
+                    setModalOpen(false);
+                  }}
+                  className="p-1 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
+                  aria-label="Fermer la modale"
                 >
-                  <span>{selectedTypeLabel}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                  <X className="w-4 h-4" />
                 </button>
-
-                {typeMenuOpen && (
-                  <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-[#12161F] border border-[#262C3A] rounded-lg shadow-xl z-20 py-1">
-                    {ASSIGNMENT_TYPES.map((t) => (
-                      <button
-                        key={t.value}
-                        type="button"
-                        onClick={() => {
-                          setNewType(t.value);
-                          setTypeMenuOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer ${
-                          newType === t.value
-                            ? "bg-indigo-600/25 text-indigo-300"
-                            : "text-zinc-200 hover:bg-[#1C2230]"
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div>
-                <label className="block text-xs text-zinc-400 mb-1">Date</label>
+                <label className="block text-xs text-zinc-400 mb-1">
+                  Matière
+                </label>
+                <select
+                  value={newSubjectId}
+                  onChange={(e) => setNewSubjectId(e.target.value)}
+                  className="w-full bg-[#0F1117] border border-[#262C3A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                >
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Titre</label>
                 <input
-                  type="date"
+                  type="text"
                   required
-                  value={newDate}
-                  onChange={(e) => setNewDate(e.target.value)}
-                  className="w-full bg-[#0F1117] border border-[#262C3A] rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="ex. Exercices séries numériques"
+                  className="w-full bg-[#0F1117] border border-[#262C3A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
-            </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setTypeMenuOpen(false);
-                  setModalOpen(false);
-                }}
-                className="px-3 py-1.5 text-xs text-zinc-400 border border-[#262C3A] rounded-lg cursor-pointer"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg cursor-pointer"
-              >
-                Ajouter à l&apos;agenda
-              </button>
-            </div>
-          </form>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div ref={typeMenuRef} className="relative">
+                  <label className="block text-xs text-zinc-400 mb-1">Type</label>
+                  <button
+                    type="button"
+                    onClick={() => setTypeMenuOpen((prev) => !prev)}
+                    className="w-full bg-[#0F1117] border border-[#262C3A] hover:border-[#374151] rounded-lg px-2.5 py-2 text-xs text-white flex items-center justify-between focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <span>{selectedTypeLabel}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                  </button>
+
+                  {typeMenuOpen && (
+                    <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-[#12161F] border border-[#262C3A] rounded-lg shadow-xl z-20 py-1">
+                      {ASSIGNMENT_TYPES.map((t) => (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => {
+                            setNewType(t.value);
+                            setTypeMenuOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer ${
+                            newType === t.value
+                              ? "bg-indigo-600/25 text-indigo-300"
+                              : "text-zinc-200 hover:bg-[#1C2230]"
+                          }`}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                    className="w-full bg-[#0F1117] border border-[#262C3A] rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {submitError && (
+                <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-lg px-3 py-2">
+                  {submitError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTypeMenuOpen(false);
+                    setModalOpen(false);
+                  }}
+                  className="px-3 py-1.5 text-xs text-zinc-400 border border-[#262C3A] rounded-lg cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white rounded-lg cursor-pointer"
+                >
+                  {submitting ? "Ajout..." : "Ajouter à l'agenda"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

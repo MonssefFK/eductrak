@@ -18,7 +18,7 @@ import { ChapterSlideOver, ChapterData } from "./ChapterSlideOver";
 interface AssignmentRow {
   id: string;
   title: string;
-  type: AssignmentType;
+  type: AssignmentType | string;
   dueDate: string;
   isCompleted: boolean;
 }
@@ -29,6 +29,16 @@ interface ResourceRow {
   url: string;
   category: string;
 }
+
+const ASSIGNMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "DEVOIR", label: "Devoir" },
+  { value: "DS", label: "DS" },
+  { value: "TP", label: "TP" },
+  { value: "DM", label: "DM" },
+  { value: "PROJET", label: "Projet" },
+  { value: "KHOLLE", label: "Khôlle" },
+  { value: "REVISION", label: "Révision" },
+];
 
 export function SubjectDetailClient({
   subject,
@@ -75,7 +85,7 @@ export function SubjectDetailClient({
 
   const [newAssignOpen, setNewAssignOpen] = useState(false);
   const [newAssignTitle, setNewAssignTitle] = useState("");
-  const [newAssignType, setNewAssignType] = useState<AssignmentType>("DS");
+  const [newAssignType, setNewAssignType] = useState<string>("DEVOIR");
   const [newAssignDate, setNewAssignDate] = useState("");
 
   // Ajout ressource
@@ -718,17 +728,14 @@ export function SubjectDetailClient({
                 <label className="block text-xs text-zinc-400 mb-1">Type</label>
                 <select
                   value={newAssignType}
-                  onChange={(e) =>
-                    setNewAssignType(e.target.value as AssignmentType)
-                  }
+                  onChange={(e) => setNewAssignType(e.target.value)}
                   className="w-full bg-[#0F1117] border border-[#262C3A] rounded-lg px-2.5 py-2 text-xs text-white"
                 >
-                  <option value="DS">DS</option>
-                  <option value="TP">TP</option>
-                  <option value="DM">DM</option>
-                  <option value="PROJET">Projet</option>
-                  <option value="KHOLLE">Khôlle</option>
-                  <option value="REVISION">Révision</option>
+                  {ASSIGNMENT_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>

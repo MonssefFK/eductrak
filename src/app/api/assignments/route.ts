@@ -1,71 +1,73 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
 import { AssignmentType } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getCurrentSession } from "@/lib/auth";
 
-export async function GET(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const user = await requireUser();
-    const { searchParams } = new URL(request.url);
-    const subjectId = searchParams.get("subjectId");
+    const session = await getCurrentSession();
+    if (!session) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
 
-    const assignments = await prisma.assignment.findMany({
-      where: {
-        userId: user.userId,
-        ...(subjectId && subjectId !== "ALL" ? { subjectId } : {}),
-      },
-      orderBy: { dueDate: "asc" },
-      include: {
-        subject: { select: { id: true, name: true, color: true } },
-      },
-    });
-
-    return NextResponse.json(assignments);
-  } catch {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const user = await requireUser();
-    const body = await request.json();
-
-    const subjectId = String(body.subjectId || "");
+    const body = await req.json();
+    const subjectId = String(body.subjectId || "").trim();
     const title = String(body.title || "").trim();
-    const type = (body.type as AssignmentType) || "DS";
-    const dueDate = new Date(body.dueDate);
+    const rawType = String(body.type || "DS").trim();
+    const dueDateStr = String(body.dueDate || "").trim();
 
-    if (!subjectId || !title || isNaN(dueDate.getTime())) {
+    if (!subjectId || !title || !dueDateStr) {
       return NextResponse.json(
-        { error: "Matière, titre et date valide requis." },
+        { error: "Champs manquants" },
         { status: 400 }
       );
     }
 
-    const subject = await prisma.subject.findFirst({
-      where: { id: subjectId, userId: user.userId },
-    });
-    if (!subject) {
-      return NextResponse.json({ error: "Matière introuvable" }, { status: 404 });
+    const parsedDate = new Date(`${dueDateStr}T12:00:00`);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return NextResponse.json({ error: "Date invalide" }, { status: 400 });
     }
 
-    const assignment = await prisma.assignment.create({
+    const validTypes = Object.values(AssignmentType) as string[];
+    const type: AssignmentType = validTypes.includes(rawType)
+      ? (rawType as AssignmentType)
+      : (validTypes.includes("DEVOIR")
+          ? "DEVOIR"
+          : validTypes[0]) as AssignmentType;
+
+    const subject = await prisma.subject.findFirst({
+      where: { id: subjectId, userId: session.userId },
+      select: { id: true, name: true, color: true },
+    });
+
+    if (!subject) {
+      return NextResponse.json(
+        { error: "Matière introuvable" },
+        { status: 404 }
+      );
+    }
+
+    const created = await prisma.assignment.create({
       data: {
-        userId: user.userId,
-        subjectId,
         title,
         type,
-        dueDate,
-        isCompleted: false,
+        dueDate: parsedDate,
+        subjectId: subject.id,
+        userId: session.userId,
       },
       include: {
-        subject: { select: { id: true, name: true, color: true } },
+        subject: {
+          select: { id: true, name: true, color: true },
+        },
       },
     });
 
-    return NextResponse.json(assignment, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Erreur création échéance" }, { status: 500 });
+    return NextResponse.json(created, { status: 201 });
+  } catch (err) {
+    console.error("POST /api/assignments error:", err);
+    return NextResponse.json(
+      { error: "Erreur création échéance" },
+      { status: 500 }
+    );
   }
 }
